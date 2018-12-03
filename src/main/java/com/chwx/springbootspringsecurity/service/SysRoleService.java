@@ -13,4 +13,8 @@ public class SysRoleService {
     public SysRole selectById(Integer id){
         return sysRoleMapper.selectById(id);
     }
+
+    public Integer selectByName(String name){
+        return  sysRoleMapper.selectByName(name);
+    }
 }

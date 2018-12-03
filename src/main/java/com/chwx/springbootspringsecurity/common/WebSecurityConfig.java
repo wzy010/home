@@ -3,6 +3,7 @@ package com.chwx.springbootspringsecurity.common;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationDetailsSource;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -10,9 +11,12 @@ import org.springframework.security.config.annotation.web.builders.WebSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.access.expression.DefaultWebSecurityExpressionHandler;
+import org.springframework.security.web.authentication.WebAuthenticationDetails;
 import org.springframework.security.web.authentication.rememberme.JdbcTokenRepositoryImpl;
 import org.springframework.security.web.authentication.rememberme.PersistentTokenRepository;
 
+import javax.servlet.http.HttpServletRequest;
 import javax.sql.DataSource;
 
 @Configuration
@@ -23,14 +27,24 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
     private CustomUserDetailsService userDetailsService;
     @Autowired
     private DataSource dataSource;
+    @Autowired
+    private AuthenticationDetailsSource<HttpServletRequest,WebAuthenticationDetails> authenticationDetailsSource;
+    @Autowired
+    private CustomAuthenticationProvider customAuthenticationProvider;
 
     @Bean
     public PersistentTokenRepository persistentTokenRepository(){
         JdbcTokenRepositoryImpl tokenRepository = new JdbcTokenRepositoryImpl();
         tokenRepository.setDataSource(dataSource);
         //如果toke表不存在,使用下面语句可以初始化该表,若存在,会报错
-        tokenRepository.setCreateTableOnStartup(true);
+        //tokenRepository.setCreateTableOnStartup(true);
         return tokenRepository;
+    }
+    @Bean(name = "securityExpressionHandler")
+    public DefaultWebSecurityExpressionHandler webSecurityExpressionHandler(){
+        DefaultWebSecurityExpressionHandler handler = new DefaultWebSecurityExpressionHandler();
+        handler.setPermissionEvaluator(new CustomPermissionEvaluator());
+        return handler;
     }
 
     @Override
@@ -38,17 +52,40 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
 
         http.authorizeRequests()
                 //如果有允许匿名访问的url,填写在下面
-                //.antMatchers().permitAll()
+                .antMatchers("/getVerifyCode").permitAll()
         .anyRequest()
                 .authenticated()
                 //设置登录页面
                 .and().formLogin().loginPage("/login")
                 //设置登陆成功页面
         .defaultSuccessUrl("/").permitAll()
+                .failureUrl("/login/error")
+                /*.failureHandler(new AuthenticationFailureHandler() {
+                    @Override
+                    public void onAuthenticationFailure(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse, AuthenticationException e) throws IOException, ServletException {
+                        httpServletResponse.setContentType("application/json;charset=utf-8");
+                        PrintWriter out = httpServletResponse.getWriter();
+                       StringBuffer sb = new StringBuffer();
+                       sb.append("{\"status\":\"error\",\"msg\":\"");
+                        if (e instanceof UsernameNotFoundException || e instanceof BadCredentialsException) {
+                            sb.append("用户名或密码输入错误，登录失败!");
+                        } else if (e instanceof DisabledException) {
+                            sb.append("账户被禁用，登录失败，请联系管理员!");
+                        } else {
+                            sb.append("登录失败!");
+                        }
+                        sb.append("\"}");
+                        out.write(sb.toString());
+                        out.flush();
+                        out.close();
+                    }
+                })*/
                 // 自定义登陆用户名和密码参数，默认为username和password
 //                .usernameParameter("username")
 //                .passwordParameter("password")
-        .and().logout().permitAll()
+                //指定authenticationDetailsSource
+        .authenticationDetailsSource(authenticationDetailsSource)
+                .and().logout().permitAll()
         .and().rememberMe()
                 //自动登录
         .tokenRepository(persistentTokenRepository())
